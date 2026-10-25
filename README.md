@@ -18,7 +18,9 @@ HAP takes that idea as an inspiration, not as proof that markets or decentraliza
 
 The core idea is to treat a group of agents as a team whose members can make different mistakes, rather than counting every answer as an independent vote.
 
-The following describes the proposed approach. It is not a claim that a finished protocol already delivers all these features. The exact selection and weighting rules still need testing.
+**Two engines, two jobs.** HAP distinguishes between handing one task to one worker and assembling a panel for a group decision. For a single job, a Single-Task Engine runs a second-price (Vickrey) procurement auction: the lowest eligible bid wins, and the winner is paid the second-lowest bid. Its reference code is in [docs/history/hap_core.py](docs/history/hap_core.py). For a group decision, a Group Assembly Engine ([src/hap_experiment.py](src/hap_experiment.py)) chooses agents by balancing each one's past accuracy against what it shares with those already chosen: model family, operator, search pipeline and correlated past errors, and optionally price. The auction is kept separate and comes later. First the benchmark must show that diversity-aware selection helps; the auction would then need its own comparison with simpler ways of assigning work.
+
+The steps below describe the group side, which is tested first. They are not a claim that a finished protocol already delivers all these features. The exact selection and weighting rules still need testing.
 
 ### 1. Know where each answer comes from
 
