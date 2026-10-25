@@ -199,7 +199,7 @@ python3 src/hap_experiment.py --questions my_questions.csv --predictions my_pred
 
 - `src/hap_experiment.py`: data loading, the three group-forming methods, metrics and reports. HAP's selection weights are fixed in `HAPWeights` and must be chosen on training questions only.
 - `tests/test_experiment.py`: tests for the metrics, the selection rules and the rule that selection never sees test outcomes.
-- `docs/history/`: the original essay and auction code.
+- `docs/history/`: the original essay and auction code. Its demo needs one extra package: `pip install cryptography`, then `python3 docs/history/hap_core.py`.
 
 ## Why call it a protocol if the first step is a benchmark?
 

@@ -8,12 +8,12 @@
       "gpt_4"
     ],
     "n_questions": 12,
-    "brier": 0.07884657494791666,
-    "log_loss": 0.24434026606966577,
+    "brier": 0.0788465749,
+    "log_loss": 0.2443402661,
     "everyone_wrong": 2,
     "confidently_wrong": 0,
-    "tail_brier": 0.2935990770833333,
-    "shared_error": 0.99634471579005
+    "tail_brier": 0.2935990771,
+    "shared_error": 0.9963447158
   },
   {
     "pool": "naive_mix",
@@ -24,12 +24,12 @@
       "local_2"
     ],
     "n_questions": 12,
-    "brier": 0.07691662802083334,
-    "log_loss": 0.279264040636176,
+    "brier": 0.076916628,
+    "log_loss": 0.2792640406,
     "everyone_wrong": 0,
     "confidently_wrong": 0,
-    "tail_brier": 0.2303154335416667,
-    "shared_error": 0.6372780498368462
+    "tail_brier": 0.2303154335,
+    "shared_error": 0.6372780498
   },
   {
     "pool": "hap",
@@ -40,11 +40,11 @@
       "gpt_1"
     ],
     "n_questions": 12,
-    "brier": 0.06444443645833332,
-    "log_loss": 0.2570543408898204,
+    "brier": 0.0644444365,
+    "log_loss": 0.2570543409,
     "everyone_wrong": 0,
     "confidently_wrong": 0,
-    "tail_brier": 0.17052240937499996,
-    "shared_error": 0.6413701845446996
+    "tail_brier": 0.1705224094,
+    "shared_error": 0.6413701845
   }
 ]

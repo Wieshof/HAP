@@ -80,38 +80,65 @@ class Dataset:
             raise ValueError(f"missing forecast for {agent_id} on {question_id}") from None
 
 
+QUESTION_COLUMNS = ("question_id", "text", "outcome", "split")
+PREDICTION_COLUMNS = ("question_id", "agent_id", "model_family", "operator",
+                      "pipeline", "price", "probability")
+
+
+def _read_rows(path: Path, columns: Sequence[str]) -> List[Dict[str, str]]:
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        missing = [c for c in columns if c not in (reader.fieldnames or [])]
+        if missing:
+            raise ValueError(
+                f"{path}: missing column(s) {', '.join(missing)}; "
+                f"expected {', '.join(columns)}"
+            )
+        return list(reader)
+
+
+def _number(row: Dict[str, str], column: str, where: str, kind: type = float):
+    try:
+        return kind(row[column])
+    except (TypeError, ValueError):
+        raise ValueError(f"{where}: {column} must be a number, got {row[column]!r}") from None
+
+
 def load_dataset(questions_csv: Path, predictions_csv: Path) -> Dataset:
     """Read questions and predictions. Predictions carry the agent's declared
-    provenance and price on every row; they must agree across rows."""
+    provenance and price on every row; they must agree across rows.
+    Problems are reported as ValueError naming the file and line."""
     questions: Dict[str, Question] = {}
-    with open(questions_csv, newline="") as f:
-        for row in csv.DictReader(f):
-            outcome = int(row["outcome"])
-            if outcome not in (0, 1) or row["split"] not in ("train", "test"):
-                raise ValueError(f"bad question row: {row}")
-            questions[row["question_id"]] = Question(
-                row["question_id"], row["text"], outcome, row["split"]
-            )
+    for line, row in enumerate(_read_rows(questions_csv, QUESTION_COLUMNS), start=2):
+        where = f"{questions_csv}, line {line}"
+        outcome = _number(row, "outcome", where, int)
+        if outcome not in (0, 1):
+            raise ValueError(f"{where}: outcome must be 0 or 1")
+        if row["split"] not in ("train", "test"):
+            raise ValueError(f"{where}: split must be train or test")
+        questions[row["question_id"]] = Question(
+            row["question_id"], row["text"], outcome, row["split"]
+        )
 
     agents: Dict[str, Agent] = {}
     forecasts: Dict[Tuple[str, str], float] = {}
-    with open(predictions_csv, newline="") as f:
-        for row in csv.DictReader(f):
-            agent = Agent(
-                row["agent_id"], row["model_family"], row["operator"],
-                row["pipeline"], float(row["price"]),
-            )
-            if agents.setdefault(agent.agent_id, agent) != agent:
-                raise ValueError(f"inconsistent metadata for {agent.agent_id}")
-            p = float(row["probability"])
-            if not 0.0 <= p <= 1.0:
-                raise ValueError(f"probability out of range: {row}")
-            if row["question_id"] not in questions:
-                raise ValueError(f"unknown question: {row['question_id']}")
-            key = (row["question_id"], agent.agent_id)
-            if key in forecasts:
-                raise ValueError(f"duplicate forecast: {key}")
-            forecasts[key] = p
+    for line, row in enumerate(_read_rows(predictions_csv, PREDICTION_COLUMNS), start=2):
+        where = f"{predictions_csv}, line {line}"
+        agent = Agent(
+            row["agent_id"], row["model_family"], row["operator"],
+            row["pipeline"], _number(row, "price", where),
+        )
+        if agents.setdefault(agent.agent_id, agent) != agent:
+            raise ValueError(f"{where}: inconsistent metadata for {agent.agent_id}")
+        p = _number(row, "probability", where)
+        if not 0.0 <= p <= 1.0:
+            raise ValueError(f"{where}: probability must be between 0 and 1")
+        if row["question_id"] not in questions:
+            raise ValueError(f"{where}: unknown question {row['question_id']}")
+        key = (row["question_id"], agent.agent_id)
+        if key in forecasts:
+            raise ValueError(f"{where}: duplicate forecast {key}")
+        forecasts[key] = p
 
     for qid in questions:
         for aid in agents:
@@ -361,7 +388,12 @@ def generate_smoke_data(out_dir: Path, n_questions: int = 24, seed: int = 7) -> 
 
 def write_outputs(results: Sequence[PoolResult], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = [dataclasses.asdict(r) for r in results]
+    # Python 3.12 made sum() more precise, so the last digits differ between
+    # versions. Ten decimals keep committed outputs identical everywhere.
+    rows = [
+        {k: round(v, 10) if isinstance(v, float) else v for k, v in dataclasses.asdict(r).items()}
+        for r in results
+    ]
     with open(out_dir / "results.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
@@ -424,7 +456,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     if args.generate_smoke:
         generate_smoke_data(ROOT / "data")
-    results = run(load_dataset(args.questions, args.predictions), args.k)
+    try:
+        data = load_dataset(args.questions, args.predictions)
+    except (OSError, ValueError) as exc:
+        ap.exit(2, f"error: {exc}\n")
+    results = run(data, args.k)
     write_outputs(results, args.out)
     print(format_report(results))
 

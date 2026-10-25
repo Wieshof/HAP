@@ -129,6 +129,24 @@ class SelectionTests(unittest.TestCase):
 
 
 class LoadTests(unittest.TestCase):
+    def load(self, questions, predictions):
+        with tempfile.TemporaryDirectory() as d:
+            q, p = Path(d) / "q.csv", Path(d) / "p.csv"
+            q.write_text(questions)
+            p.write_text(predictions)
+            return hx.load_dataset(q, p)
+
+    HEADER = "question_id,agent_id,model_family,operator,pipeline,price,probability\n"
+
+    def test_missing_column_names_the_column(self):
+        with self.assertRaisesRegex(ValueError, "missing column.*outcome"):
+            self.load("question_id,text,split\nq1,x,test\n", self.HEADER)
+
+    def test_bad_number_names_the_line(self):
+        with self.assertRaisesRegex(ValueError, "line 2: probability must be a number"):
+            self.load("question_id,text,outcome,split\nq1,x,1,test\n",
+                      self.HEADER + "q1,a,gpt,openai,web,1,high\n")
+
     def test_rejects_inconsistent_metadata(self):
         with tempfile.TemporaryDirectory() as d:
             q, p = Path(d) / "q.csv", Path(d) / "p.csv"
