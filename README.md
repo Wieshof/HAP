@@ -173,9 +173,33 @@ It would not force disagreement or automatically stop the system whenever everyo
 
 The September 2026 review reported a small synthetic smoke test: 24 simulated questions, 12 used to choose the groups and 12 to test them, with four agents per group. Both mixed-model groups clearly beat the repeated single model (Brier score about 0.12 against 0.30). HAP and simple mixed-model averaging were statistically indistinguishable at that size. Simple mixing is therefore a strong baseline, not proof that diversity is irrelevant. The test checked the experimental plumbing; it did not validate the hypothesis.
 
-That result is historical and has not been independently rerun for this README. The 500-plus study remains a proposed next step. No larger validated result is claimed here.
+That result is historical. The code behind it was not preserved, so it cannot be rerun.
+
+The benchmark in this repository was rebuilt in October 2026 from the September description. It uses a new synthetic fixture: 24 questions and ten agents from four model families, some sharing an operator or a search pipeline. Its numbers therefore differ from the September ones. On this fixture all three groups have low average error. The repeated single model is the only group where every member got the same question wrong (2 of 12), and its members' mistakes are almost identical (shared error 1.00, against about 0.64 for both mixed groups). HAP's lower average error than simple mixing (0.06 against 0.08) is within the noise of 12 questions and built-in synthetic data. It is not evidence that HAP works.
+
+The 500-plus study remains a proposed next step. No larger validated result is claimed here.
 
 **Status: exploratory research, not a proven product.**
+
+## Try the benchmark
+
+Python 3.10 or newer is enough; there are no other dependencies.
+
+```bash
+./run_smoke.sh
+```
+
+This regenerates the synthetic data, runs the comparison and the tests, and writes `outputs/smoke/report.md`, `results.csv` (unrounded values) and `results.json`.
+
+To run it on your own forecasts, supply two CSV files in the same format as `data/questions.csv` and `data/smoke_predictions.csv`:
+
+```bash
+python3 src/hap_experiment.py --questions my_questions.csv --predictions my_predictions.csv --out outputs/my_run
+```
+
+- `src/hap_experiment.py`: data loading, the three group-forming methods, metrics and reports. HAP's selection weights are fixed in `HAPWeights` and must be chosen on training questions only.
+- `tests/test_experiment.py`: tests for the metrics, the selection rules and the rule that selection never sees test outcomes.
+- `docs/history/`: the original essay and auction code.
 
 ## Why call it a protocol if the first step is a benchmark?
 

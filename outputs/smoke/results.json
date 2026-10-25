@@ -1,0 +1,50 @@
+[
+  {
+    "pool": "same_model",
+    "agents": [
+      "gpt_1",
+      "gpt_3",
+      "gpt_2",
+      "gpt_4"
+    ],
+    "n_questions": 12,
+    "brier": 0.07884657494791666,
+    "log_loss": 0.24434026606966577,
+    "everyone_wrong": 2,
+    "confidently_wrong": 0,
+    "tail_brier": 0.2935990770833333,
+    "shared_error": 0.99634471579005
+  },
+  {
+    "pool": "naive_mix",
+    "agents": [
+      "claude_2",
+      "gpt_1",
+      "gemini_2",
+      "local_2"
+    ],
+    "n_questions": 12,
+    "brier": 0.07691662802083334,
+    "log_loss": 0.279264040636176,
+    "everyone_wrong": 0,
+    "confidently_wrong": 0,
+    "tail_brier": 0.2303154335416667,
+    "shared_error": 0.6372780498368462
+  },
+  {
+    "pool": "hap",
+    "agents": [
+      "claude_2",
+      "claude_1",
+      "gemini_2",
+      "gpt_1"
+    ],
+    "n_questions": 12,
+    "brier": 0.06444443645833332,
+    "log_loss": 0.2570543408898204,
+    "everyone_wrong": 0,
+    "confidently_wrong": 0,
+    "tail_brier": 0.17052240937499996,
+    "shared_error": 0.6413701845446996
+  }
+]

@@ -1,0 +1,25 @@
+question_id,text,outcome,split
+Q01,Synthetic question 1,1,train
+Q02,Synthetic question 2,1,train
+Q03,Synthetic question 3,1,train
+Q04,Synthetic question 4,0,train
+Q05,Synthetic question 5,1,train
+Q06,Synthetic question 6,1,train
+Q07,Synthetic question 7,0,train
+Q08,Synthetic question 8,0,train
+Q09,Synthetic question 9,0,train
+Q10,Synthetic question 10,0,train
+Q11,Synthetic question 11,0,train
+Q12,Synthetic question 12,1,train
+Q13,Synthetic question 13,0,test
+Q14,Synthetic question 14,1,test
+Q15,Synthetic question 15,0,test
+Q16,Synthetic question 16,1,test
+Q17,Synthetic question 17,1,test
+Q18,Synthetic question 18,1,test
+Q19,Synthetic question 19,1,test
+Q20,Synthetic question 20,0,test
+Q21,Synthetic question 21,0,test
+Q22,Synthetic question 22,0,test
+Q23,Synthetic question 23,0,test
+Q24,Synthetic question 24,0,test
