@@ -1,3 +1,4 @@
+# Historical prototype (September 2026), kept for reference. See docs/history/README.md.
 """hap_core.py - Hayekian Agent Protocol (HAP) reference core, v2.
 
 A sealed-bid, second-price (Vickrey) procurement auction with:

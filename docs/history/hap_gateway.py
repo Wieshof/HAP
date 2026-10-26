@@ -1,3 +1,4 @@
+# Historical prototype (September 2026), kept for reference. See docs/history/README.md.
 """hap_gateway.py - FastAPI gateway for the Hayekian Agent Protocol (v2).
 
 Thin HTTP layer over hap_core: all validation lives in the engine, so the

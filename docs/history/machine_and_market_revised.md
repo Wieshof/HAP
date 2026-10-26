@@ -1,5 +1,7 @@
 # The Machine and the Market: Hayekian Epistemology, Agent Swarms, and the Limits of Political Analogy
 
+> **Historical background, September 2026. Not the current benchmark specification.** The main [README](../../README.md) now carries the full explanation in plain language; this essay keeps the formal argument and detail.
+
 ---
 
 ## I. Dispersed Knowledge and the Price System
