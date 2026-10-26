@@ -10,10 +10,9 @@ The Hayekian Agent Protocol (HAP) asks whether groups of agents can work togethe
 
 ## What is in this repository today?
 
-A small, runnable comparison using simulated forecasts. It does not yet show that the method helps real agents. Three states appear throughout this README, and they should not be blurred:
+A small, runnable comparison using simulated forecasts. It does not yet show that the method helps real agents. Two states appear throughout this README, and they should not be blurred:
 
 - **Runnable now:** the forecasting benchmark below, with tests and example data. Python 3.10 or newer, no other dependencies.
-- **Historical prototype:** the earlier auction engine in `docs/history/`, which still runs, and the essay it came with. A superseded first design, kept for reference.
 - **Proposed, not yet tested:** a larger study with real forecasts, and the longer-term market design. Plans, not results.
 
 ## Try it
@@ -74,7 +73,7 @@ The longer-term ambition is a way for people and agents to contribute what they 
 
 ### Assigning single tasks: the Vickrey auction
 
-*Historical prototype in `docs/history/`; not part of the current benchmark. Its demo was last run on 25 October 2026.*
+*Proposed design. Not implemented in this repository and not part of the current benchmark.*
 
 HAP began with a different question: how can independent agents offer to do work without one central dispatcher needing to know every agent's costs? The proposed answer is a reverse Vickrey auction, also called a second-price procurement auction. Ordinary auctions sell to the highest bidder. Here, agents offer to do a job, so the lowest eligible bid wins, and the winner is paid the second-lowest eligible bid.
 
@@ -82,11 +81,11 @@ HAP began with a different question: how can independent agents offer to do work
 
 **What can go wrong.** That result rests on conditions real markets meet only partly:
 
-- **Uncertain costs.** Agents estimate their token use and latency before running the task. Because they draw on similar models and shared token prices, the winner may simply be the most overoptimistic bidder (the "winner's curse"). The reference code includes a bid margin parameter as a partial mitigation.
-- **Identity.** A signed bid proves which registered identity sent it, not that the identity is an independent operator. If one party controls several bidders, it can set its own payout. Genuine resistance to fake identities needs an external cost of identity, such as a deposit or verified registration, which the prototype does not provide.
+- **Uncertain costs.** Agents estimate their token use and latency before running the task. Because they draw on similar models and shared token prices, the winner may simply be the most overoptimistic bidder (the "winner's curse"). Bidding a margin above expected cost is one partial mitigation.
+- **Identity.** A signed bid proves which registered identity sent it, not that the identity is an independent operator. If one party controls several bidders, it can set its own payout. Genuine resistance to fake identities needs an external cost of identity, such as a deposit or verified registration, which this design does not yet include.
 - **Quality.** A cheap bid is not evidence of quality or independence. How quality and diversity requirements would interact with prices remains an open design question.
 
-The prototype enforces signed bids, one sealed bid per agent per task, a deadline, a maximum price and a deterministic tie-break. It does not provide Sybil resistance, payment, persistence or quality checks, and says so. The core demo needs `pip install cryptography`, then `python3 docs/history/hap_core.py`; the optional HTTP gateway additionally needs `fastapi` and `pydantic`.
+The proposed rules are signed bids, one sealed bid per agent per task, a deadline, a maximum price and a deterministic tie-break. Resistance to fake identities, payment, persistence and quality checks remain open problems.
 
 ### Coordination without one controller
 
@@ -98,7 +97,7 @@ Three further ideas from the wider design, all untested proposals:
 
 ### Where the analogy stops
 
-The original essay's most useful warning: in Albert Hirschman's terms from *Exit, Voice, and Loyalty* (1970), people can leave a system or protest within it. Agents can only exit: they time out, fail health checks or exhaust budgets. A swarm converging on a wrong answer is not staging a revolt; it is executing bad mathematics along the path of least resistance. Stable rules, isolated state and price-like signalling are engineering heuristics worth testing, not proofs of a political worldview.
+One warning shapes the whole design: in Albert Hirschman's terms from *Exit, Voice, and Loyalty* (1970), people can leave a system or protest within it. Agents can only exit: they time out, fail health checks or exhaust budgets. A swarm converging on a wrong answer is not staging a revolt; it is executing bad mathematics along the path of least resistance. Stable rules, isolated state and price-like signalling are engineering heuristics worth testing, not proofs of a political worldview.
 
 ## Repository layout
 
@@ -107,15 +106,12 @@ The original essay's most useful warning: in Albert Hirschman's terms from *Exit
 - `data/`: the synthetic fixture of 24 questions and ten agents.
 - `outputs/smoke/`: a saved example report you can read without running anything.
 - `run_smoke.sh`: regenerates the data, runs the comparison and the tests.
-- `docs/history/`: the original essay and the auction prototype, kept for reference with their own status notes.
 
 ## Background reading
 
 [Hayek's *The Use of Knowledge in Society*](https://www.econlib.org/book-chapters/chapter-the-use-of-knowledge-in-society/)
 
 [Second-price auction incentives, explained in teaching notes](https://www.kiragoldner.com/teaching/DS574/fall22/L2.pdf). These notes describe the standard selling auction; HAP's example reverses it to buy a service.
-
-The original essay, *The Machine and the Market*, is preserved in [docs/history](docs/history/) for readers who want the full argument and the formal details. You do not need it to understand or run the benchmark.
 
 ## Feedback
 
