@@ -1,13 +1,15 @@
 """hap_experiment.py - HAP diversity benchmark.
 
-Compares three ways of forming a group of forecasting agents on resolved
+Compares four ways of forming a group of forecasting agents on resolved
 binary questions:
 
   1. Same model repeated: k agents from the model family that scored best on
      the training split.
   2. Naive mix: the best agent from each of the k best families, averaged.
   3. HAP diversity-aware: greedy selection that trades training accuracy
-     against residual-error correlation, declared provenance overlap and price.
+     against error correlation, declared provenance overlap and price.
+  4. Contribution-based: greedy selection that adds whichever agent most
+     improves the group's averaged forecast, and stops when nothing helps.
 
 Selection sees only the training split. Every metric is reported on the test
 split. Group forecasts are the plain average of the members' probabilities.
@@ -18,8 +20,9 @@ Metrics (lower is better for all of them):
   * Everyone wrong: questions where every member gave the true outcome < 50%.
   * Confidently wrong: questions where the group gave the wrong outcome >= 75%.
   * Tail error: mean Brier of the worst quarter of questions.
-  * Shared error: mean pairwise Pearson correlation of member residuals
-    (forecast minus outcome). 1.00 means identical mistakes.
+  * Shared error: mean pairwise Pearson correlation of members' per-question
+    misses |forecast - outcome|. 1.00 means they miss on the same questions
+    by the same amounts; about 0 means unrelated mistakes.
 
 The bundled smoke data are synthetic. They test the plumbing, not the thesis.
 
@@ -33,6 +36,7 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
+import itertools
 import json
 import math
 import random
@@ -190,6 +194,16 @@ def residuals(data: Dataset, agent_id: str, qids: Sequence[str]) -> List[float]:
     return [data.forecast(q, agent_id) - data.questions[q].outcome for q in qids]
 
 
+def errors(data: Dataset, agent_id: str, qids: Sequence[str]) -> List[float]:
+    """Per-question miss: how far the forecast was from the outcome, |p - y|.
+
+    Shared-error measures correlate these, not the signed residuals p - y.
+    Signed residuals are negative whenever the outcome is 1 and positive when
+    it is 0, so any two forecasters that lean toward the truth look correlated
+    even if their mistakes are independent."""
+    return [abs(data.forecast(q, agent_id) - data.questions[q].outcome) for q in qids]
+
+
 def mean_pairwise(values: Dict[str, List[float]]) -> float:
     ids = list(values)
     pairs = [(a, b) for i, a in enumerate(ids) for b in ids[i + 1:]]
@@ -246,7 +260,7 @@ def evaluate_pool(data: Dataset, pool: str, agent_ids: Sequence[str],
         everyone_wrong=everyone_wrong,
         confidently_wrong=confidently_wrong,
         tail_brier=sum(worst) / len(worst),
-        shared_error=mean_pairwise({a: residuals(data, a, qids) for a in agent_ids}),
+        shared_error=mean_pairwise({a: errors(data, a, qids) for a in agent_ids}),
     )
 
 
@@ -302,14 +316,14 @@ class HAPWeights:
 
 def select_hap(data: Dataset, k: int, weights: HAPWeights = HAPWeights()) -> List[str]:
     """Greedy selection minimising
-        Brier + w_corr * mean residual correlation with chosen members
+        Brier + w_corr * mean error correlation with chosen members
               + w_prov * mean provenance overlap with chosen members
               + w_price * price / max price
     on the training split."""
     qids = data.question_ids("train")
     if len(data.agents) < k:
         raise ValueError(f"need {k} agents, found {len(data.agents)}")
-    res = {a: residuals(data, a, qids) for a in data.agents}
+    res = {a: errors(data, a, qids) for a in data.agents}
     acc = {a: agent_brier(data, a, qids) for a in data.agents}
     max_price = max(a.price for a in data.agents.values()) or 1.0
 
@@ -325,6 +339,40 @@ def select_hap(data: Dataset, k: int, weights: HAPWeights = HAPWeights()) -> Lis
             return (c, a)
         chosen.append(min((a for a in data.agents if a not in chosen), key=cost))
     return chosen
+
+
+def group_brier(data: Dataset, agent_ids: Sequence[str], qids: Sequence[str]) -> float:
+    """Brier score of the group's averaged forecast."""
+    return sum(
+        brier(sum(data.forecast(q, a) for a in agent_ids) / len(agent_ids), data.questions[q].outcome)
+        for q in qids
+    ) / len(qids)
+
+
+def select_contribution(data: Dataset, k: int, min_gain: float = 0.002) -> List[str]:
+    """Select by measured contribution on the training split.
+
+    Try every group of 1 to k agents and score its averaged forecast. Keep the
+    smallest group whose Brier is within `min_gain` of the best group found,
+    so members that add (almost) nothing are left out. Searching all groups
+    rather than adding one agent at a time matters: a weak but different
+    agent often only helps once several others are in the group.
+
+    The number of groups grows quickly with the pool, and comparing many on
+    few questions favours lucky groups. Fine for a dozen agents; a larger pool
+    needs a cheaper search."""
+    qids = data.question_ids("train")
+    ids = sorted(data.agents)
+    best_by_size: List[Tuple[float, Tuple[str, ...]]] = []
+    for size in range(1, min(k, len(ids)) + 1):
+        best_by_size.append(min(
+            (group_brier(data, combo, qids), combo) for combo in itertools.combinations(ids, size)
+        ))
+    overall = min(score for score, _ in best_by_size)
+    for score, combo in best_by_size:
+        if score <= overall + min_gain:
+            return list(combo)
+    raise AssertionError("unreachable")
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +451,12 @@ def write_outputs(results: Sequence[PoolResult], out_dir: Path) -> None:
     (out_dir / "report.md").write_text(format_report(results) + "\n")
 
 
-NAMES = {"same_model": "Same model repeated", "naive_mix": "Naive mix", "hap": "HAP diversity-aware"}
+NAMES = {
+    "same_model": "Same model repeated",
+    "naive_mix": "Naive mix",
+    "hap": "HAP diversity-aware",
+    "contribution": "Contribution-based",
+}
 
 
 def format_report(results: Sequence[PoolResult]) -> str:
@@ -411,16 +464,17 @@ def format_report(results: Sequence[PoolResult]) -> str:
     lines = [
         "# HAP diversity experiment results",
         "",
-        f"Test questions: {n}. Group size: {len(results[0].agents)}. "
+        f"Test questions: {n}. Groups have at most {max(len(r.agents) for r in results)} members. "
         "Exact unrounded values are in `results.csv`.",
         "",
-        "| Group | Average error (Brier) ↓ | Everyone wrong ↓ | Confidently wrong ↓ | Shared error ↓ |",
-        "| --- | --- | --- | --- | --- |",
+        "| Group | Size | Average error (Brier) ↓ | Everyone wrong ↓ | Confidently wrong ↓ | Shared error ↓ |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for r in results:
+        shared = f"{r.shared_error:.2f}" if len(r.agents) > 1 else "n/a"
         lines.append(
-            f"| {NAMES.get(r.pool, r.pool)} | {r.brier:.2f} | {r.everyone_wrong} of {n} "
-            f"| {r.confidently_wrong} of {n} | {r.shared_error:.2f} |"
+            f"| {NAMES.get(r.pool, r.pool)} | {len(r.agents)} | {r.brier:.2f} | {r.everyone_wrong} of {n} "
+            f"| {r.confidently_wrong} of {n} | {shared} |"
         )
     lines += [""] + [f"- {NAMES.get(r.pool, r.pool)}: {', '.join(r.agents)}" for r in results]
     lines += [
@@ -440,6 +494,7 @@ def run(data: Dataset, k: int = 4, weights: HAPWeights = HAPWeights()) -> List[P
         ("same_model", select_same_model(data, k)),
         ("naive_mix", select_naive_mix(data, k)),
         ("hap", select_hap(data, k, weights)),
+        ("contribution", select_contribution(data, k)),
     ]
     return [evaluate_pool(data, name, ids) for name, ids in pools]
 

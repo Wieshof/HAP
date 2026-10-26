@@ -48,6 +48,19 @@ class MetricTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             hx.pearson([1, 2], [1, 2, 3])
 
+    def test_errors_ignore_outcome_direction(self):
+        # Two forecasters with unrelated misses: signed residuals would still
+        # correlate because they flip sign with the outcome; misses do not.
+        data = make_dataset({
+            "q1": (1, {"a": 0.9, "b": 0.6}),
+            "q2": (1, {"a": 0.6, "b": 0.9}),
+            "q3": (0, {"a": 0.1, "b": 0.4}),
+            "q4": (0, {"a": 0.4, "b": 0.1}),
+        })
+        qids = data.question_ids("test")
+        self.assertGreater(hx.pearson(hx.residuals(data, "a", qids), hx.residuals(data, "b", qids)), 0.4)
+        self.assertAlmostEqual(hx.pearson(hx.errors(data, "a", qids), hx.errors(data, "b", qids)), -1.0)
+
     def test_provenance_overlap(self):
         a = hx.Agent("a", "gpt", "openai", "web", 1)
         b = hx.Agent("b", "gpt", "openai", "offline", 1)
@@ -116,7 +129,8 @@ class SelectionTests(unittest.TestCase):
              for q, v in self.data.questions.items()},
             self.data.agents, self.data.forecasts,
         )
-        for select in (hx.select_same_model, hx.select_naive_mix, hx.select_hap):
+        for select in (hx.select_same_model, hx.select_naive_mix, hx.select_hap,
+                       hx.select_contribution):
             self.assertEqual(select(self.data, 4), select(flipped, 4))
 
     def test_run_writes_outputs(self):
@@ -124,8 +138,27 @@ class SelectionTests(unittest.TestCase):
         out = Path(self.dir.name) / "out"
         hx.write_outputs(results, out)
         with open(out / "results.csv") as f:
-            self.assertEqual(len(list(csv.DictReader(f))), 3)
+            self.assertEqual(len(list(csv.DictReader(f))), 4)
         self.assertIn("HAP diversity-aware", (out / "report.md").read_text())
+
+
+class ContributionSelectorTests(unittest.TestCase):
+    def test_leaves_out_members_that_add_nothing(self):
+        # b copies a exactly, so the best group is a alone.
+        rows = {f"q{i}": (y, {"a": p, "b": p, "c": 0.5})
+                for i, (y, p) in enumerate([(1, 0.8), (0, 0.3), (1, 0.7), (0, 0.1)])}
+        data = make_dataset(rows, split={q: "train" for q in rows})
+        self.assertEqual(hx.select_contribution(data, 3), ["a"])
+
+    def test_keeps_a_weaker_member_that_cancels_errors(self):
+        # b is worse than a on its own, but misses on different questions,
+        # so averaging the two beats a alone.
+        data = make_dataset({
+            "q1": (1, {"a": 0.9, "b": 0.6, "c": 0.7}),
+            "q2": (0, {"a": 0.2, "b": 0.0, "c": 0.3}),
+            "q3": (1, {"a": 0.7, "b": 1.0, "c": 0.7}),
+        }, split={"q1": "train", "q2": "train", "q3": "train"})
+        self.assertIn("b", hx.select_contribution(data, 2))
 
 
 class LoadTests(unittest.TestCase):

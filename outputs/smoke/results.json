@@ -13,7 +13,7 @@
     "everyone_wrong": 2,
     "confidently_wrong": 0,
     "tail_brier": 0.2935990771,
-    "shared_error": 0.9963447158
+    "shared_error": 0.9932487299
   },
   {
     "pool": "naive_mix",
@@ -29,7 +29,7 @@
     "everyone_wrong": 0,
     "confidently_wrong": 0,
     "tail_brier": 0.2303154335,
-    "shared_error": 0.6372780498
+    "shared_error": 0.2965272429
   },
   {
     "pool": "hap",
@@ -45,6 +45,19 @@
     "everyone_wrong": 0,
     "confidently_wrong": 0,
     "tail_brier": 0.1705224094,
-    "shared_error": 0.6413701845
+    "shared_error": 0.2384531368
+  },
+  {
+    "pool": "contribution",
+    "agents": [
+      "claude_2"
+    ],
+    "n_questions": 12,
+    "brier": 0.0961855567,
+    "log_loss": 0.3265781533,
+    "everyone_wrong": 1,
+    "confidently_wrong": 1,
+    "tail_brier": 0.3021705267,
+    "shared_error": 0.0
   }
 ]
