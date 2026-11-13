@@ -44,6 +44,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
+if not (ROOT / "data").exists() and (Path.cwd() / "data").exists():
+    ROOT = Path.cwd()
 EPS = 1e-6
 
 

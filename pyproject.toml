@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hap"
+version = "0.2.0"
+description = "Hayekian Agent Protocol: diversity and contribution benchmark for forecasting agents"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Wieshof"}
+]
+keywords = [
+    "agents",
+    "brier-score",
+    "diversity",
+    "forecasting",
+    "hayek",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Wieshof/HAP"
+Repository = "https://github.com/Wieshof/HAP"
+
+[project.scripts]
+hap-experiment = "hap_experiment:main"
+hap-contribution = "hap_contribution:main"
+
+[tool.setuptools]
+py-modules = ["hap_experiment", "hap_contribution"]
+package-dir = {"" = "src"}

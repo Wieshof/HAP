@@ -35,6 +35,14 @@ The buyer test takes the same files plus your requirement: maximum Brier score, 
 python3 src/hap_contribution.py --questions my_questions.csv --predictions my_predictions.csv --out outputs/my_run --max-brier 0.10 --max-confident-wrong 0.25 --budget 3
 ```
 
+Alternatively, install the package to use the CLI entry points directly:
+
+```bash
+pip install -e .
+hap-experiment --questions my_questions.csv --predictions my_predictions.csv --out outputs/my_run
+hap-contribution --questions my_questions.csv --predictions my_predictions.csv --out outputs/my_run --max-brier 0.10 --max-confident-wrong 0.25 --budget 3
+```
+
 ## The question
 
 When several agents agree, is that because they checked the problem independently, or because they share the same blind spot? Imagine ten agents assessing a business plan: all ten approve it, and all ten overlooked the same cash-flow problem. Ten agreeing answers produced false reassurance.
@@ -129,6 +137,7 @@ One warning shapes the whole design: in Albert Hirschman's terms from *Exit, Voi
 
 ## Repository layout
 
+- `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`).
 - `src/hap_experiment.py`: data loading, the four group-forming methods, metrics and reports.
 - `src/hap_contribution.py`: the four contribution cases, the with/without tables and the buyer test.
 - `tests/`: tests for the metrics, the selection rules, the cases, the buyer test and the rule that selection never sees test outcomes.
