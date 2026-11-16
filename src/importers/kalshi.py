@@ -5,7 +5,7 @@ API documentation: https://docs.kalshi.com/welcome
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .base import (
     AgentDefinition,
@@ -18,6 +18,7 @@ from .base import (
     usable_price,
     usable_quote,
 )
+from .history import prices_from_history
 
 KALSHI_API_BASE = "https://api.elections.kalshi.com/trade-api/v2"
 
@@ -176,8 +177,11 @@ class KalshiImporter(BaseImporter):
         yes_bid, yes_ask = usable_quote(yes_bid, yes_ask)
         if last_price is None and yes_bid is None:
             # Settled markets report an empty book as 0 / 1; without a real
-            # price there is no forecast to keep.
-            return None
+            # price there is no forecast to keep, unless it will come from
+            # price history instead.
+            if self.require_final_price:
+                return None
+            last_price = 0.5
 
         if yes_bid is not None and yes_ask is not None:
             midpoint = 0.5 * (yes_bid + yes_ask)
@@ -222,8 +226,73 @@ class KalshiImporter(BaseImporter):
             created_time=created_time,
             volume=vol,
             predictions=predictions,
-            metadata={"ticker": ticker, "event_ticker": raw.get("event_ticker")},
+            metadata={
+                "ticker": ticker,
+                "event_ticker": raw.get("event_ticker"),
+                "series_ticker": raw.get("series_ticker"),
+            },
         )
+
+    def _series_ticker(self, market: RawMarket) -> str:
+        series = market.metadata.get("series_ticker")
+        if series:
+            return str(series)
+        event = market.metadata.get("event_ticker")
+        if not event:
+            raise RuntimeError(f"{market.id}: no event ticker to look up its series")
+        cache = self.__dict__.setdefault("_series_cache", {})
+        if event not in cache:
+            data = fetch_http_json(f"{KALSHI_API_BASE}/events/{urllib.parse.quote(str(event))}")
+            ev = data.get("event") if isinstance(data, dict) else None
+            cache[event] = (ev or {}).get("series_ticker")
+        if not cache[event]:
+            raise RuntimeError(f"{market.id}: Kalshi returned no series for event {event}")
+        return str(cache[event])
+
+    @staticmethod
+    def _candle_price(candle: Dict[str, Any]) -> Optional[float]:
+        """Closing traded price of an hourly candle, else the midpoint of a real quote."""
+        def dollars(block: Any) -> Optional[float]:
+            if isinstance(block, dict) and block.get("close_dollars") not in (None, ""):
+                try:
+                    return float(block["close_dollars"])
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        traded = usable_price(dollars(candle.get("price")))
+        if traded is not None:
+            return traded
+        bid, ask = usable_quote(dollars(candle.get("yes_bid")), dollars(candle.get("yes_ask")))
+        if bid is not None and ask is not None:
+            return 0.5 * (bid + ask)
+        return None
+
+    def prices_at(self, market: RawMarket, times: Sequence[float],
+                  api_key: Optional[str] = None) -> List[Optional[float]]:
+        """Market price at each Unix time, from hourly candlesticks."""
+        ticker = market.metadata.get("ticker")
+        if not ticker:
+            raise RuntimeError(f"{market.id}: no ticker")
+        series = self._series_ticker(market)
+        start = min(times) - 86400.0
+        if market.created_time is not None:
+            start = max(start, market.created_time - 3600.0)
+        query = urllib.parse.urlencode({
+            "start_ts": str(int(start)),
+            "end_ts": str(int(max(times))),
+            "period_interval": "60",
+        })
+        url = (f"{KALSHI_API_BASE}/series/{urllib.parse.quote(series)}/markets/"
+               f"{urllib.parse.quote(str(ticker))}/candlesticks?{query}")
+        data = fetch_http_json(url)
+        history = []
+        for candle in (data.get("candlesticks") or []) if isinstance(data, dict) else []:
+            price = self._candle_price(candle)
+            ts = candle.get("end_period_ts")
+            if price is not None and ts is not None:
+                history.append((float(ts), price))
+        return prices_from_history(history, times)
 
     def fetch_live_raw(self, limit: int = 100, api_key: Optional[str] = None,
                        **kwargs) -> List[Dict[str, Any]]:
@@ -239,8 +308,13 @@ class KalshiImporter(BaseImporter):
         while len(results) < limit:
             params = {
                 "status": "settled",
+                # Leave out multivariate combo markets (parlays), which often
+                # trade for seconds and dominate the newest settled markets.
+                "mve_filter": "exclude",
                 "limit": str(batch_size),
             }
+            if kwargs.get("series"):
+                params["series_ticker"] = str(kwargs["series"])
             if cursor:
                 params["cursor"] = cursor
 

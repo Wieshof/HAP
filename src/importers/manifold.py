@@ -5,7 +5,7 @@ API documentation: https://docs.manifold.markets/api
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from .base import (
     AgentDefinition,
@@ -181,8 +181,41 @@ class ManifoldImporter(BaseImporter):
             metadata={
                 "unique_bettors": raw.get("uniqueBettorCount"),
                 "raw_resolution": resolution,
+                "contract_id": str(raw.get("id") or ""),
+                "initial_probability": raw.get("initialProbability"),
             },
         )
+
+    def prices_at(self, market: RawMarket, times: Sequence[float],
+                  api_key: Optional[str] = None) -> List[Optional[float]]:
+        """Market probability at each Unix time, from the last bet before it.
+
+        Before the first bet the price is the market's initial probability,
+        which is known from the moment the market opens.
+        """
+        contract_id = market.metadata.get("contract_id")
+        if not contract_id:
+            raise RuntimeError(f"{market.id}: no Manifold contract id")
+        headers = {"Authorization": f"Key {api_key}"} if api_key else None
+
+        def bets(**params: Any) -> List[Dict[str, Any]]:
+            query = {"contractId": contract_id, "limit": "1", **params}
+            data = fetch_http_json(f"{MANIFOLD_API_BASE}/bets?{urllib.parse.urlencode(query)}", headers=headers)
+            return data if isinstance(data, list) else []
+
+        initial: Optional[float] = market.metadata.get("initial_probability")
+        out: List[Optional[float]] = []
+        for t in times:
+            last = bets(order="desc", beforeTime=str(int(t * 1000)))
+            if last and last[0].get("probAfter") is not None:
+                out.append(float(last[0]["probAfter"]))
+                continue
+            if initial is None:
+                first = bets(order="asc")
+                if first and first[0].get("probBefore") is not None:
+                    initial = float(first[0]["probBefore"])
+            out.append(initial)
+        return out
 
     def fetch_live_raw(self, limit: int = 100, api_key: Optional[str] = None,
                        **kwargs) -> List[Dict[str, Any]]:

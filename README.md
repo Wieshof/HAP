@@ -13,7 +13,7 @@ The Hayekian Agent Protocol (HAP) asks whether groups of agents can work togethe
 A small, runnable comparison using simulated forecasts. It does not yet show that the method helps real agents. Two states appear throughout this README, and they should not be blurred:
 
 - **Runnable now:** the forecasting benchmark below, an analysis of what each model contributes, and a buyer test that picks the cheapest option meeting a stated requirement. With tests and example data. Python 3.10 or newer, no other dependencies.
-- **Experimental:** importers that turn resolved questions from Manifold, Metaculus, Polymarket and Kalshi into benchmark input. They run, but their signals are not yet fair forecasts (see the limits below).
+- **Experimental:** importers that turn resolved questions from Manifold, Metaculus, Polymarket and Kalshi into benchmark input, using each market's price a fixed time before close. They run, but they give market baselines, not independent agents (see the limits below).
 - **Proposed, not yet tested:** a larger study with real forecasts, and the longer-term market design. Plans, not results.
 
 ## Try it
@@ -57,22 +57,48 @@ It reads a saved dump (JSON, JSONL, or the wrapped object an API returns) or fet
 
 ```bash
 pip install -e .
-hap-import manifold --fetch --limit 200 --out outputs/manifold_live --save-raw data/raw_manifold.json
-hap-experiment --questions outputs/manifold_live/questions.csv --predictions outputs/manifold_live/predictions.csv --out outputs/manifold_live/benchmark
+hap-import manifold --fetch --limit 200 --hours-before-close 24 --out outputs/manifold_24h --save-raw data/raw_manifold.json
+hap-experiment --questions outputs/manifold_24h/questions.csv --predictions outputs/manifold_24h/predictions.csv --out outputs/manifold_24h/benchmark
 ```
 
 Other subcommands: `metaculus`, `polymarket`, `kalshi`, `auto` (guesses the platform from a dump) and `multi` (combines dumps from several platforms). Run `hap-import <subcommand> --help` for the options. By default the split is chronological, so selection is learned on older questions and tested on newer ones. `--split random --seed 42` shuffles instead.
 
 The files in `data/sample_dumps/` are invented examples in each platform's format, for the tests and for trying the commands offline. They are not real market records.
 
+On macOS with Python from python.org, a fetch can fail with `CERTIFICATE_VERIFY_FAILED`. Running `Install Certificates.command` in the Python folder under Applications once fixes it.
+
+### Prices from before the close
+
+Use `--hours-before-close HOURS` for any analysis meant to say something about forecasting. The final price a platform reports for a resolved question is often set after the answer is public, so it is not a forecast. With this option the importer asks each platform for its price history and takes the price at a cutoff: the given number of hours before the market closed, or before it resolved if that came first. It also takes the price seven days before the cutoff, or the opening price if the market is younger.
+
+| Platform | Source of the price at the cutoff |
+| --- | --- |
+| Manifold | the probability after the last bet before the cutoff (the initial probability if there was none) |
+| Polymarket | the CLOB price history of the Yes token, hourly |
+| Kalshi | hourly candlesticks: the last traded price, otherwise the midpoint of a real bid and ask |
+| Metaculus | the community forecast history inside the question record, if the dump includes it (no extra request; not yet checked against the live API, which needs a token) |
+
+Markets that opened after the cutoff, or had no price by then, are left out, and the importer prints how many and why. The question and outcome stay the same; only the forecasts change. The signals are then the same eight on every platform (`crowd_at_cutoff`, `crowd_earlier`, their average and a blend, shrunk, extremized, dampened, and the 50% baseline), so platforms can be combined with `multi --hours-before-close`.
+
+How much this matters, measured on markets that resolved in November 2026:
+
+| Data | Questions | Brier of the final price | Brier of the price at the cutoff |
+| --- | --- | --- | --- |
+| Manifold, 24 hours before close | 126 | 0.068 | 0.137 |
+| Kalshi (non-combo markets), 1 hour before close | 55 | 0.002 | 0.248 |
+
+The final price looks twice as good on Manifold and nearly perfect on Kalshi, because it already knows the answer. Without the option the importer keeps its earlier behaviour, final prices, for comparison.
+
+Each cutoff needs one or two requests per market, so a few hundred markets take a minute or two. The newest settled Kalshi markets are mostly hourly ones that a 24-hour cutoff leaves out; `--series` picks a series, for example `hap-import kalshi --fetch --series KXHIGHNY --hours-before-close 24` for New York's daily high temperature. Polymarket markets from before about 2022 have no price history.
+
 ### What these imports can and cannot show yet
 
 Read the results with four limits in mind. They come from running the importers against the live APIs in November 2026.
 
-1. **The "agents" are not independent.** Each platform yields eight signals, but all of them except the 50% baseline are rescalings of one or two numbers: the final market price and, where available, the opening price or bid and ask. Labels such as "statistical" or "heuristic" families do not make them independent sources. This is the illusory diversity the benchmark is meant to detect, so a diversity result on these files says little about real agents. Their useful role is as baselines that real model forecasts must beat.
-2. **Final prices can come after the answer is known.** The importers use the last price the platform reports for a resolved question. On many markets the last trades happen once the outcome is already public, which makes the market look better than it was at forecast time. A fair test needs prices from a fixed time before close, taken from each platform's price history. The importers do not do this yet.
-3. **Polymarket currently yields nothing usable.** For resolved markets the Gamma API reports placeholder prices (last trade 0, bid 0, ask 1). The importer now skips such markets instead of reading them as forecasts. A live fetch can therefore end with no questions until price history is used.
-4. **Kalshi reports an empty order book after settlement** (bid 0, ask 1). The importer ignores it and uses the last traded price, with the caveat in point 2.
+1. **The "agents" are not independent.** Each import yields eight signals, but all of them except the 50% baseline are rescalings of one market's prices (at the cutoff and earlier, or the final price, opening price, bid and ask). Labels such as "statistical" or "heuristic" families do not make them independent sources. This is the illusory diversity the benchmark is meant to detect, so a diversity result on these files says little about real agents. Their useful role is as baselines that real model forecasts must beat.
+2. **Without `--hours-before-close`, prices come after the answer is known.** See the table above. Final-price imports are useful only to show that gap.
+3. **A cutoff before close is not always before the event.** Some markets close well after the event they ask about, for example a market on a match that stays open until a fixed date. A cutoff of a few hours can then still fall after the answer was public. Longer cutoffs reduce this; checking it properly needs the event's own date, which the importers do not read.
+4. **Without price history, Polymarket and Kalshi give little.** After resolution Polymarket reports placeholder prices (last trade 0, bid 0, ask 1) and Kalshi an empty order book (bid 0, ask 1). Final-price imports skip or ignore these.
 
 ## The question
 
@@ -103,7 +129,7 @@ The benchmark in this repository is the October 2026 rebuild of that description
 
 Shared error is measured as the correlation of how far each member's forecast was from the outcome on each question. An earlier version correlated signed errors (forecast minus outcome), which makes any two forecasters look related because both lean toward the true answer. That inflated the shared error of the mixed groups (previously reported as 0.64); the corrected figures are above.
 
-The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance. The experimental importers are a first step: they bring in real questions and outcomes, but not yet forecasts that meet the first of these safeguards.
+The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance. The experimental importers are a first step: with `--hours-before-close` they bring in real questions, outcomes and market prices from before the answer was known (subject to limit 3 in that section). The forecasts of real AI models still have to be collected.
 
 ## What does each model add?
 
@@ -171,7 +197,7 @@ One warning shapes the whole design: in Albert Hirschman's terms from *Exit, Voi
 - `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`, `hap-import`).
 - `src/hap_experiment.py`: data loading, the four group-forming methods, metrics and reports.
 - `src/hap_contribution.py`: the four contribution cases, the with/without tables and the buyer test.
-- `src/importers/`: the experimental `hap-import` loaders for Manifold, Metaculus, Polymarket and Kalshi.
+- `src/importers/`: the experimental `hap-import` loaders for Manifold, Metaculus, Polymarket and Kalshi; `history.py` reads prices at a fixed time before close.
 - `tests/`: tests for the metrics, the selection rules, the cases, the buyer test, the packaging, the importers and the rule that selection never sees test outcomes.
 - `data/`: the synthetic fixture of 24 questions and ten agents, and `sample_dumps/` with invented records in each platform's format.
 - `outputs/smoke/`: saved example reports you can read without running anything.

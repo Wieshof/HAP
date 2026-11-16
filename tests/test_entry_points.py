@@ -12,8 +12,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 try:
     import tomllib
-except ImportError:
-    import tomli as tomllib  # type: ignore
+except ImportError:  # Python 3.10 has no tomllib; tomli is optional there.
+    try:
+        import tomli as tomllib  # type: ignore
+    except ImportError:
+        tomllib = None
 
 import hap_contribution as hc
 import hap_experiment as hx
@@ -27,6 +30,7 @@ class PackagingTests(unittest.TestCase):
     def test_pyproject_exists(self):
         self.assertTrue(self.pyproject_path.exists(), "pyproject.toml should exist")
 
+    @unittest.skipIf(tomllib is None, "needs tomllib (Python 3.11+) or tomli")
     def test_pyproject_structure(self):
         with open(self.pyproject_path, "rb") as f:
             data = tomllib.load(f)

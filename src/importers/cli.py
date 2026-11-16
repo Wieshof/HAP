@@ -16,6 +16,9 @@ Usage examples:
 
   # Combine dumps from multiple platforms:
   hap-import multi --manifold m.json --metaculus meta.json --out data/combined_exp/
+
+Use prices from a fixed time before close instead of the final price:
+  hap-import manifold --fetch --limit 200 --hours-before-close 24 --out data/manifold_24h/
 """
 from __future__ import annotations
 
@@ -26,6 +29,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from .base import BaseImporter, ImportedDataset, RawMarket
+from .history import apply_price_history, history_agents
 from .kalshi import KalshiImporter
 from .manifold import ManifoldImporter
 from .metaculus import MetaculusImporter
@@ -38,6 +42,15 @@ from .unified import (
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--hours-before-close",
+        type=float,
+        default=None,
+        metavar="HOURS",
+        help="Use each market's price this many hours before it closed, read from "
+             "the platform's price history (needs network except for Metaculus). "
+             "Markets with no price by then are left out. Default: the final price.",
+    )
     parser.add_argument(
         "--dump",
         type=Path,
@@ -98,6 +111,8 @@ def handle_platform_import(
 ) -> int:
     """Handle loading, fetching, converting and saving for a single platform."""
     markets: List[RawMarket] = []
+    hours = getattr(args, "hours_before_close", None)
+    importer.require_final_price = hours is None
 
     if args.dump:
         print(f"Loading {importer.platform_name} dump from {args.dump}...")
@@ -106,7 +121,8 @@ def handle_platform_import(
 
     elif args.fetch:
         print(f"Fetching up to {args.limit} resolved markets from {importer.platform_name} API...")
-        raw_items = importer.fetch_live_raw(limit=args.limit, api_key=args.api_key)
+        extra = {"series": args.series} if getattr(args, "series", None) else {}
+        raw_items = importer.fetch_live_raw(limit=args.limit, api_key=args.api_key, **extra)
         print(f"Received {len(raw_items)} raw market records from API")
 
         if args.save_raw:
@@ -129,11 +145,20 @@ def handle_platform_import(
         print("Error: No valid resolved binary markets could be extracted.", file=sys.stderr)
         return 1
 
+    agents = None
+    if hours is not None:
+        markets = _at_cutoff(importer, markets, hours, args.api_key)
+        if not markets:
+            print(f"Error: no market had a price {hours:g} hours before close.", file=sys.stderr)
+            return 1
+        agents = history_agents(hours)
+
     dataset = importer.to_hap_dataset(
         markets=markets,
         split_strategy=args.split,
         train_ratio=args.train_ratio,
         seed=args.seed,
+        agents=agents,
     )
 
     q_path, p_path = dataset.write_csv(args.out)
@@ -146,6 +171,20 @@ def handle_platform_import(
     print(f"\nRun benchmark with:")
     print(f"  hap-experiment --questions {q_path} --predictions {p_path} --out {args.out / 'benchmark'}")
     return 0
+
+
+def _at_cutoff(importer: BaseImporter, markets: List[RawMarket], hours: float,
+               api_key: Optional[str]) -> List[RawMarket]:
+    """Swap final prices for prices from ``hours`` before close, and report what was left out."""
+    print(f"Reading {importer.platform_name} prices {hours:g} hours before close for {len(markets)} markets...")
+    kept, skipped = apply_price_history(
+        importer, markets, hours, api_key=api_key,
+        progress=lambda msg: print(msg, flush=True),
+    )
+    print(f"  Kept {len(kept)} markets with a price before the cutoff")
+    for reason, count in skipped.most_common():
+        print(f"  Left out {count}: {reason}")
+    return kept
 
 
 def handle_auto_import(args: argparse.Namespace) -> int:
@@ -180,8 +219,11 @@ def handle_multi_import(args: argparse.Namespace) -> int:
         if path:
             print(f"Loading {plat} dump from {path}...")
             imp = get_importer(plat)
+            imp.require_final_price = args.hours_before_close is None
             mkts = imp.load_dump_file(path)
             print(f"  Loaded {len(mkts)} markets from {plat}")
+            if args.hours_before_close is not None:
+                mkts = _at_cutoff(imp, mkts, args.hours_before_close, None)
             markets_by_platform[plat] = mkts
 
     if not markets_by_platform:
@@ -193,6 +235,7 @@ def handle_multi_import(args: argparse.Namespace) -> int:
         split_strategy=args.split,
         train_ratio=args.train_ratio,
         seed=args.seed,
+        agents=history_agents(args.hours_before_close) if args.hours_before_close is not None else None,
     )
 
     q_path, p_path = dataset.write_csv(args.out)
@@ -228,6 +271,10 @@ def build_parser() -> argparse.ArgumentParser:
     # Kalshi
     p_kalshi = subparsers.add_parser("kalshi", help="Import from Kalshi")
     _add_common_arguments(p_kalshi)
+    p_kalshi.add_argument(
+        "--series",
+        help="Only fetch markets of this Kalshi series, e.g. KXHIGHNY (daily New York high temperature)",
+    )
 
     # Auto
     p_auto = subparsers.add_parser("auto", help="Auto-detect platform from dump file")
@@ -239,6 +286,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_multi.add_argument("--metaculus", type=Path, help="Path to Metaculus dump")
     p_multi.add_argument("--polymarket", type=Path, help="Path to Polymarket dump")
     p_multi.add_argument("--kalshi", type=Path, help="Path to Kalshi dump")
+    p_multi.add_argument(
+        "--hours-before-close",
+        type=float,
+        default=None,
+        metavar="HOURS",
+        help="Use each market's price this many hours before it closed, read from "
+             "the platform's price history (needs network except for Metaculus). "
+             "Markets with no price by then are left out. Default: the final price.",
+    )
     p_multi.add_argument(
         "--out",
         type=Path,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .base import (
     AgentDefinition,
@@ -20,7 +20,9 @@ from .base import (
     usable_price,
     usable_quote,
 )
+from .history import prices_from_history
 
+CLOB_API_BASE = "https://clob.polymarket.com"
 GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 
 
@@ -203,8 +205,11 @@ class PolymarketImporter(BaseImporter):
         bid_val, ask_val = usable_quote(bid_val, ask_val)
         if lt_val is None and bid_val is None:
             # A resolved market without a real price (Gamma reports 0 / 0 / 1
-            # once it settles) carries no forecast; skip it.
-            return None
+            # once it settles) carries no forecast. Skip it, unless the
+            # forecast will come from price history instead.
+            if self.require_final_price:
+                return None
+            lt_val = 0.5
 
         if bid_val is not None and ask_val is not None:
             mid_val = 0.5 * (bid_val + ask_val)
@@ -252,8 +257,31 @@ class PolymarketImporter(BaseImporter):
             metadata={
                 "condition_id": raw.get("conditionId"),
                 "clob_token_ids": raw.get("clobTokenIds"),
+                "yes_token_id": self._yes_token_id(raw, outcomes_norm),
             },
         )
+
+    def _yes_token_id(self, raw: Dict[str, Any], outcomes_norm: List[str]) -> Optional[str]:
+        tokens = self._parse_json_field(raw.get("clobTokenIds"))
+        if isinstance(tokens, list) and len(tokens) == len(outcomes_norm) and "yes" in outcomes_norm:
+            return str(tokens[outcomes_norm.index("yes")])
+        return None
+
+    def prices_at(self, market: RawMarket, times: Sequence[float],
+                  api_key: Optional[str] = None) -> List[Optional[float]]:
+        """Price of the Yes token at each Unix time, from the CLOB price history."""
+        token = market.metadata.get("yes_token_id")
+        if not token:
+            raise RuntimeError(f"{market.id}: no Yes token id")
+        query = urllib.parse.urlencode({"market": token, "interval": "max", "fidelity": "60"})
+        data = fetch_http_json(f"{CLOB_API_BASE}/prices-history?{query}")
+        history = []
+        for point in (data.get("history") or []) if isinstance(data, dict) else []:
+            try:
+                history.append((float(point["t"]), float(point["p"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return prices_from_history(history, times)
 
     def fetch_live_raw(self, limit: int = 100, api_key: Optional[str] = None,
                        **kwargs) -> List[Dict[str, Any]]:
@@ -271,6 +299,10 @@ class PolymarketImporter(BaseImporter):
                 "closed": "true",
                 "limit": str(batch_size),
                 "offset": str(offset),
+                # Newest first: markets from before the CLOB era (2020-2022)
+                # have no price history.
+                "order": "closedTime",
+                "ascending": "false",
             }
             url = f"{GAMMA_API_BASE}/markets?{urllib.parse.urlencode(params)}"
             batch = fetch_http_json(url, headers=headers)

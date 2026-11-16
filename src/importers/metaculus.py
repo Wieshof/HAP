@@ -5,7 +5,7 @@ API documentation: https://www.metaculus.com/api/
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .base import (
     AgentDefinition,
@@ -16,6 +16,7 @@ from .base import (
     parse_timestamp,
     sanitize_probability,
 )
+from .history import prices_from_history
 
 METACULUS_API_BASE = "https://www.metaculus.com/api2"
 
@@ -222,8 +223,38 @@ class MetaculusImporter(BaseImporter):
             created_time=created_time,
             volume=float(raw["number_of_forecasters"]) if raw.get("number_of_forecasters") else None,
             predictions=predictions,
-            metadata={"raw_resolution": res, "number_of_forecasters": raw.get("number_of_forecasters")},
+            metadata={
+                "raw_resolution": res,
+                "number_of_forecasters": raw.get("number_of_forecasters"),
+                "forecast_history": self._history(aggregations),
+            },
         )
+
+    @staticmethod
+    def _history(aggregations: Any) -> List[Tuple[float, float]]:
+        """Recency-weighted community forecast over time, if the record has it."""
+        if not isinstance(aggregations, dict):
+            return []
+        rw = aggregations.get("recency_weighted")
+        entries = rw.get("history") if isinstance(rw, dict) else None
+        points: List[Tuple[float, float]] = []
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            start = parse_timestamp(entry.get("start_time"))
+            centers = entry.get("centers")
+            if start is None or not isinstance(centers, list) or not centers:
+                continue
+            try:
+                points.append((start, float(centers[0])))
+            except (TypeError, ValueError):
+                continue
+        return points
+
+    def prices_at(self, market: RawMarket, times: Sequence[float],
+                  api_key: Optional[str] = None) -> List[Optional[float]]:
+        """Community forecast at each Unix time, from the history in the record itself."""
+        return prices_from_history(market.metadata.get("forecast_history") or [], times)
 
     def fetch_live_raw(self, limit: int = 100, api_key: Optional[str] = None,
                        **kwargs) -> List[Dict[str, Any]]:

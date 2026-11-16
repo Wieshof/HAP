@@ -214,6 +214,7 @@ def combine_multiplatform_markets(
     split_strategy: str = "chronological",
     train_ratio: float = 0.5,
     seed: int = 42,
+    agents: Optional[List[AgentDefinition]] = None,
 ) -> ImportedDataset:
     """Combine parsed markets from multiple platforms into one unified HAP dataset."""
     all_markets: List[RawMarket] = []
@@ -223,7 +224,7 @@ def combine_multiplatform_markets(
     if not all_markets:
         raise ValueError("No markets provided for combined dataset")
 
-    agents = get_canonical_cross_platform_agents()
+    agents = agents or get_canonical_cross_platform_agents()
 
     if split_strategy == "random":
         splits = split_random(all_markets, train_ratio=train_ratio, seed=seed)

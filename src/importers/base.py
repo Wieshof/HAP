@@ -115,6 +115,19 @@ class ImportedDataset:
         }
 
 
+def _normalize_iso(val: str) -> str:
+    """Rewrite ISO 8601 variants the APIs use into a form Python 3.10 accepts.
+
+    Handles a trailing Z, a "+00" offset without minutes (Polymarket) and
+    fractional seconds with other than 3 or 6 digits (Kalshi).
+    """
+    val = val.strip().replace("Z", "+00:00")
+    val = re.sub(r"([+-]\d{2})$", r"\1:00", val)
+    def pad(match: "re.Match[str]") -> str:
+        return "." + (match.group(1) + "000000")[:6]
+    return re.sub(r"\.(\d+)(?=[+-]\d{2}:\d{2}$|$)", pad, val)
+
+
 def parse_timestamp(val: Any) -> Optional[float]:
     """Parse various timestamp representations into a Unix epoch float in seconds."""
     if val is None:
@@ -134,12 +147,13 @@ def parse_timestamp(val: Any) -> Optional[float]:
             return num
         except ValueError:
             pass
-        val_clean = val.replace("Z", "+00:00")
         try:
-            dt = datetime.datetime.fromisoformat(val_clean)
-            return dt.timestamp()
+            dt = datetime.datetime.fromisoformat(_normalize_iso(val))
         except ValueError:
-            pass
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.timestamp()
     return None
 
 
@@ -280,6 +294,14 @@ def usable_quote(bid: Optional[float], ask: Optional[float]) -> Tuple[Optional[f
 class BaseImporter:
     """Base class for platform-specific prediction market importers."""
     platform_name: str = "base"
+    # Skip resolved markets that report no real final price. Price-history
+    # imports switch this off, because their forecast comes from earlier prices.
+    require_final_price: bool = True
+
+    def prices_at(self, market: RawMarket, times: Sequence[float],
+                  api_key: Optional[str] = None) -> List[Optional[float]]:
+        """Market probability at each Unix time (see history.py)."""
+        raise NotImplementedError
 
     def get_default_agents(self) -> List[AgentDefinition]:
         """Return the default set of agents/signals extracted for this platform."""
