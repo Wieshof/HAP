@@ -13,6 +13,7 @@ The Hayekian Agent Protocol (HAP) asks whether groups of agents can work togethe
 A small, runnable comparison using simulated forecasts. It does not yet show that the method helps real agents. Two states appear throughout this README, and they should not be blurred:
 
 - **Runnable now:** the forecasting benchmark below, an analysis of what each model contributes, and a buyer test that picks the cheapest option meeting a stated requirement. With tests and example data. Python 3.10 or newer, no other dependencies.
+- **Experimental:** importers that turn resolved questions from Manifold, Metaculus, Polymarket and Kalshi into benchmark input. They run, but their signals are not yet fair forecasts (see the limits below).
 - **Proposed, not yet tested:** a larger study with real forecasts, and the longer-term market design. Plans, not results.
 
 ## Try it
@@ -43,6 +44,36 @@ hap-experiment --questions my_questions.csv --predictions my_predictions.csv --o
 hap-contribution --questions my_questions.csv --predictions my_predictions.csv --out outputs/my_run --max-brier 0.10 --max-confident-wrong 0.25 --budget 3
 ```
 
+## Importing prediction-market data (experimental)
+
+The next step after simulated forecasts is real ones. `hap-import` turns resolved yes/no questions from four prediction platforms into the same two CSV files the benchmark reads:
+
+- [Manifold Markets](https://docs.manifold.markets/api): public API, no account needed.
+- [Metaculus](https://www.metaculus.com/api/): the API now answers only signed-in users, so `--fetch` needs your token via `--api-key`.
+- [Polymarket](https://docs.polymarket.com/) (Gamma API): public.
+- [Kalshi](https://docs.kalshi.com/welcome) (Trade API v2): public for market data.
+
+It reads a saved dump (JSON, JSONL, or the wrapped object an API returns) or fetches live. It keeps only questions that resolved yes or no and drops ambiguous, cancelled and multi-outcome ones.
+
+```bash
+pip install -e .
+hap-import manifold --fetch --limit 200 --out outputs/manifold_live --save-raw data/raw_manifold.json
+hap-experiment --questions outputs/manifold_live/questions.csv --predictions outputs/manifold_live/predictions.csv --out outputs/manifold_live/benchmark
+```
+
+Other subcommands: `metaculus`, `polymarket`, `kalshi`, `auto` (guesses the platform from a dump) and `multi` (combines dumps from several platforms). Run `hap-import <subcommand> --help` for the options. By default the split is chronological, so selection is learned on older questions and tested on newer ones. `--split random --seed 42` shuffles instead.
+
+The files in `data/sample_dumps/` are invented examples in each platform's format, for the tests and for trying the commands offline. They are not real market records.
+
+### What these imports can and cannot show yet
+
+Read the results with four limits in mind. They come from running the importers against the live APIs in November 2026.
+
+1. **The "agents" are not independent.** Each platform yields eight signals, but all of them except the 50% baseline are rescalings of one or two numbers: the final market price and, where available, the opening price or bid and ask. Labels such as "statistical" or "heuristic" families do not make them independent sources. This is the illusory diversity the benchmark is meant to detect, so a diversity result on these files says little about real agents. Their useful role is as baselines that real model forecasts must beat.
+2. **Final prices can come after the answer is known.** The importers use the last price the platform reports for a resolved question. On many markets the last trades happen once the outcome is already public, which makes the market look better than it was at forecast time. A fair test needs prices from a fixed time before close, taken from each platform's price history. The importers do not do this yet.
+3. **Polymarket currently yields nothing usable.** For resolved markets the Gamma API reports placeholder prices (last trade 0, bid 0, ask 1). The importer now skips such markets instead of reading them as forecasts. A live fetch can therefore end with no questions until price history is used.
+4. **Kalshi reports an empty order book after settlement** (bid 0, ask 1). The importer ignores it and uses the last traded price, with the caveat in point 2.
+
 ## The question
 
 When several agents agree, is that because they checked the problem independently, or because they share the same blind spot? Imagine ten agents assessing a business plan: all ten approve it, and all ten overlooked the same cash-flow problem. Ten agreeing answers produced false reassurance.
@@ -72,7 +103,7 @@ The benchmark in this repository is the October 2026 rebuild of that description
 
 Shared error is measured as the correlation of how far each member's forecast was from the outcome on each question. An earlier version correlated signed errors (forecast minus outcome), which makes any two forecasters look related because both lean toward the true answer. That inflated the shared error of the mixed groups (previously reported as 0.64); the corrected figures are above.
 
-The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance.
+The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance. The experimental importers are a first step: they bring in real questions and outcomes, but not yet forecasts that meet the first of these safeguards.
 
 ## What does each model add?
 
@@ -137,13 +168,15 @@ One warning shapes the whole design: in Albert Hirschman's terms from *Exit, Voi
 
 ## Repository layout
 
-- `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`).
+- `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`, `hap-import`).
 - `src/hap_experiment.py`: data loading, the four group-forming methods, metrics and reports.
 - `src/hap_contribution.py`: the four contribution cases, the with/without tables and the buyer test.
-- `tests/`: tests for the metrics, the selection rules, the cases, the buyer test and the rule that selection never sees test outcomes.
-- `data/`: the synthetic fixture of 24 questions and ten agents.
+- `src/importers/`: the experimental `hap-import` loaders for Manifold, Metaculus, Polymarket and Kalshi.
+- `tests/`: tests for the metrics, the selection rules, the cases, the buyer test, the packaging, the importers and the rule that selection never sees test outcomes.
+- `data/`: the synthetic fixture of 24 questions and ten agents, and `sample_dumps/` with invented records in each platform's format.
 - `outputs/smoke/`: saved example reports you can read without running anything.
 - `run_smoke.sh`: regenerates the data, runs the comparison, the contribution analysis, the buyer test and the tests.
+- `.github/workflows/ci.yml`: runs `run_smoke.sh` on Linux and macOS with Python 3.10 to 3.14 on every push.
 
 ## Background reading
 

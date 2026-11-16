@@ -4,6 +4,7 @@ import math
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -47,6 +48,10 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(hx.pearson([1, 1, 1], [1, 2, 3]), 0.0)
         with self.assertRaises(ValueError):
             hx.pearson([1, 2], [1, 2, 3])
+        # Defensive clamping against floating point representation exceeding +/- 1.0
+        with unittest.mock.patch("hap_experiment.math.sqrt", return_value=3.9):
+            self.assertEqual(hx.pearson([1, 2, 3], [2, 4, 6]), 1.0)
+            self.assertEqual(hx.pearson([1, 2, 3], [-2, -4, -6]), -1.0)
 
     def test_errors_ignore_outcome_direction(self):
         # Two forecasters with unrelated misses: signed residuals would still

@@ -189,7 +189,8 @@ def pearson(x: Sequence[float], y: Sequence[float]) -> float:
     vy = sum((b - my) ** 2 for b in y)
     if vx == 0.0 or vy == 0.0:
         return 0.0
-    return sum((a - mx) * (b - my) for a, b in zip(x, y)) / math.sqrt(vx * vy)
+    val = sum((a - mx) * (b - my) for a, b in zip(x, y)) / math.sqrt(vx * vy)
+    return max(-1.0, min(1.0, val))
 
 
 def residuals(data: Dataset, agent_id: str, qids: Sequence[str]) -> List[float]:

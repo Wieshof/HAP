@@ -17,6 +17,7 @@ except ImportError:
 
 import hap_contribution as hc
 import hap_experiment as hx
+from importers.cli import main as hi_main
 
 
 class PackagingTests(unittest.TestCase):
@@ -42,10 +43,12 @@ class PackagingTests(unittest.TestCase):
         scripts = project["scripts"]
         self.assertEqual(scripts.get("hap-experiment"), "hap_experiment:main")
         self.assertEqual(scripts.get("hap-contribution"), "hap_contribution:main")
+        self.assertEqual(scripts.get("hap-import"), "importers.cli:main")
 
     def test_entry_point_callables(self):
         self.assertTrue(callable(hx.main))
         self.assertTrue(callable(hc.main))
+        self.assertTrue(callable(hi_main))
 
     def test_entry_point_help(self):
         f = io.StringIO()
@@ -57,6 +60,13 @@ class PackagingTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm_con:
                 hc.main(["--help"])
             self.assertEqual(cm_con.exception.code, 0)
+
+            # hi_main returns 0 on --help rather than sys.exit(0) or raises SystemExit
+            try:
+                res = hi_main(["--help"])
+                self.assertEqual(res, 0)
+            except SystemExit as cm_imp:
+                self.assertEqual(cm_imp.code, 0)
 
     def test_entry_point_execution(self):
         f = io.StringIO()

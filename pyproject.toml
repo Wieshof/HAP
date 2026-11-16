@@ -41,7 +41,9 @@ Repository = "https://github.com/Wieshof/HAP"
 [project.scripts]
 hap-experiment = "hap_experiment:main"
 hap-contribution = "hap_contribution:main"
+hap-import = "importers.cli:main"
 
 [tool.setuptools]
 py-modules = ["hap_experiment", "hap_contribution"]
+packages = ["importers"]
 package-dir = {"" = "src"}
