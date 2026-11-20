@@ -14,6 +14,7 @@ A small, runnable comparison using simulated forecasts. It does not yet show tha
 
 - **Runnable now:** the forecasting benchmark below, an analysis of what each model contributes, and a buyer test that picks the cheapest option meeting a stated requirement. With tests and example data. Python 3.10 or newer, no other dependencies.
 - **Experimental:** importers that turn resolved questions from Manifold, Metaculus, Polymarket and Kalshi into benchmark input, using each market's price a fixed time before close. They run, but they give market baselines, not independent agents (see the limits below).
+- **Ready to run, not yet run:** a [pilot](pilot/README.md) that collects forecasts from several AI models on 50–100 open questions, with the rules for selecting and scoring fixed in advance, and then compares HAP with a cheap single model, simple averaging and the market. It needs your own model API keys. No results yet.
 - **Proposed, not yet tested:** a larger study with real forecasts, and the longer-term market design. Plans, not results.
 
 ## Try it
@@ -100,6 +101,23 @@ Read the results with four limits in mind. They come from running the importers 
 3. **A cutoff before close is not always before the event.** Some markets close well after the event they ask about, for example a market on a match that stays open until a fixed date. A cutoff of a few hours can then still fall after the answer was public. Longer cutoffs reduce this; checking it properly needs the event's own date, which the importers do not read.
 4. **Without price history, Polymarket and Kalshi give little.** After resolution Polymarket reports placeholder prices (last trade 0, bid 0, ask 1) and Kalshi an empty order book (bid 0, ask 1). Final-price imports skip or ignore these.
 
+## A pilot with real model forecasts
+
+The importers supply real questions and market prices, but every signal they produce comes from a market price. The missing half is forecasts from independent models, recorded before the answers are known. `hap-pilot` collects them in four steps:
+
+1. **`register`** takes a snapshot of open questions from Manifold, Polymarket and Kalshi and applies fixed filters: closing in 14–75 days, market price between 5% and 95%, enough trading, one market per event. It samples 60 questions by default, splits them into train and test, and freezes the agents and the selection and scoring rules in a hashed `registration.json`.
+2. **`forecast`** asks every agent for a probability within 48 hours. Agents get no tools and never see the market price. Each answer is stored with its UTC time, the full reply, tokens used and actual cost.
+3. **`resolve`** looks up outcomes after the questions close.
+4. **`score`** selects groups on the train questions and compares them on the test questions. The comparisons are against a cheap single model, the plain average of all models, and the market price at registration, each with a 95% paired bootstrap interval. The buyer test checks whether HAP finds something cheaper that is still good enough.
+
+```bash
+pip install -e ".[pilot]"
+hap-pilot register --config pilot/config.json --run pilot/runs/2026-11
+hap-pilot forecast --run pilot/runs/2026-11 --dry-run
+```
+
+[pilot/README.md](pilot/README.md) has the full plan, the steps, the expected cost (roughly $10–20 for 60 questions and eight agents) and the limits. With about 30 test questions most differences will come out unclear. That is a pilot, not proof, and a negative result counts as a result.
+
 ## The question
 
 When several agents agree, is that because they checked the problem independently, or because they share the same blind spot? Imagine ten agents assessing a business plan: all ten approve it, and all ten overlooked the same cash-flow problem. Ten agreeing answers produced false reassurance.
@@ -129,7 +147,7 @@ The benchmark in this repository is the October 2026 rebuild of that description
 
 Shared error is measured as the correlation of how far each member's forecast was from the outcome on each question. An earlier version correlated signed errors (forecast minus outcome), which makes any two forecasters look related because both lean toward the true answer. That inflated the shared error of the mixed groups (previously reported as 0.64); the corrected figures are above.
 
-The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance. The experimental importers are a first step: with `--hours-before-close` they bring in real questions, outcomes and market prices from before the answer was known (subject to limit 3 in that section). The forecasts of real AI models still have to be collected.
+The proposed next step is a study with at least 500 real forecasts, for example from timestamped records on prediction platforms such as Metaculus or Manifold, subject to each platform's data terms. That study needs safeguards the smoke test only partially meets: outcomes the model could not have known when it forecast, separate questions for developing and for judging the rules, and evaluation rules fixed in advance. The experimental importers are a first step: with `--hours-before-close` they bring in real questions, outcomes and market prices from before the answer was known (subject to limit 3 in that section). The forecasts of real AI models still have to be collected; the [pilot](pilot/README.md) is the tool for a first, small round.
 
 ## What does each model add?
 
@@ -194,11 +212,13 @@ One warning shapes the whole design: in Albert Hirschman's terms from *Exit, Voi
 
 ## Repository layout
 
-- `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`, `hap-import`).
+- `pyproject.toml`: package configuration and CLI entry points (`hap-experiment`, `hap-contribution`, `hap-import`, `hap-pilot`).
 - `src/hap_experiment.py`: data loading, the four group-forming methods, metrics and reports.
 - `src/hap_contribution.py`: the four contribution cases, the with/without tables and the buyer test.
+- `src/hap_pilot.py`: the pilot that registers open questions, collects timestamped model forecasts with their cost, resolves them and scores HAP against the comparators.
+- `pilot/`: the pilot's plan (`README.md`) and an example config.
 - `src/importers/`: the experimental `hap-import` loaders for Manifold, Metaculus, Polymarket and Kalshi; `history.py` reads prices at a fixed time before close.
-- `tests/`: tests for the metrics, the selection rules, the cases, the buyer test, the packaging, the importers and the rule that selection never sees test outcomes.
+- `tests/`: tests for the metrics, the selection rules, the cases, the buyer test, the packaging, the importers, the pilot pipeline (with markets and models mocked) and the rule that selection never sees test outcomes.
 - `data/`: the synthetic fixture of 24 questions and ten agents, and `sample_dumps/` with invented records in each platform's format.
 - `outputs/smoke/`: saved example reports you can read without running anything.
 - `run_smoke.sh`: regenerates the data, runs the comparison, the contribution analysis, the buyer test and the tests.

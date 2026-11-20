@@ -48,6 +48,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(scripts.get("hap-experiment"), "hap_experiment:main")
         self.assertEqual(scripts.get("hap-contribution"), "hap_contribution:main")
         self.assertEqual(scripts.get("hap-import"), "importers.cli:main")
+        self.assertEqual(scripts.get("hap-pilot"), "hap_pilot:main")
 
     def test_entry_point_callables(self):
         self.assertTrue(callable(hx.main))

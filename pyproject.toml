@@ -34,6 +34,10 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+# Only for the pilot's model calls; install the providers you use.
+pilot = ["anthropic", "openai", "google-genai"]
+
 [project.urls]
 Homepage = "https://github.com/Wieshof/HAP"
 Repository = "https://github.com/Wieshof/HAP"
@@ -42,8 +46,9 @@ Repository = "https://github.com/Wieshof/HAP"
 hap-experiment = "hap_experiment:main"
 hap-contribution = "hap_contribution:main"
 hap-import = "importers.cli:main"
+hap-pilot = "hap_pilot:main"
 
 [tool.setuptools]
-py-modules = ["hap_experiment", "hap_contribution"]
+py-modules = ["hap_experiment", "hap_contribution", "hap_pilot"]
 packages = ["importers"]
 package-dir = {"" = "src"}

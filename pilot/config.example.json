@@ -1,0 +1,31 @@
+{
+  "name": "pilot-2026-11",
+  "platforms": ["manifold", "polymarket", "kalshi"],
+  "cheap_baseline": "claude_haiku_direct",
+  "rules": {
+    "n_questions": 60,
+    "min_days_to_close": 14,
+    "max_days_to_close": 75,
+    "k": 3,
+    "requirement": {"max_brier": 0.20, "max_confident_wrong": 0.25, "budget_usd": 0.05},
+    "non_inferiority_margin": 0.02
+  },
+  "agents": [
+    {"agent_id": "claude_opus_direct", "provider": "anthropic", "model": "claude-opus-5-5",
+     "family": "claude", "prompt": "direct", "effort": "medium", "price_in": 4.00, "price_out": 20.00},
+    {"agent_id": "claude_opus_base_rate", "provider": "anthropic", "model": "claude-opus-5-5",
+     "family": "claude", "prompt": "base_rate", "effort": "medium", "price_in": 4.00, "price_out": 20.00},
+    {"agent_id": "claude_sonnet_direct", "provider": "anthropic", "model": "claude-sonnet-5-5",
+     "family": "claude", "prompt": "direct", "effort": "medium", "price_in": 2.00, "price_out": 10.00},
+    {"agent_id": "claude_haiku_direct", "provider": "anthropic", "model": "claude-haiku-5-5",
+     "family": "claude", "prompt": "direct", "effort": "medium", "price_in": 0.10, "price_out": 0.50},
+    {"agent_id": "gpt_large_direct", "provider": "openai", "model": "FILL_IN_OPENAI_MODEL",
+     "family": "gpt", "prompt": "direct", "price_in": null, "price_out": null},
+    {"agent_id": "gpt_small_direct", "provider": "openai", "model": "FILL_IN_OPENAI_SMALL_MODEL",
+     "family": "gpt", "prompt": "direct", "price_in": null, "price_out": null},
+    {"agent_id": "gemini_large_direct", "provider": "google", "model": "FILL_IN_GEMINI_MODEL",
+     "family": "gemini", "prompt": "direct", "price_in": null, "price_out": null},
+    {"agent_id": "gemini_small_direct", "provider": "google", "model": "FILL_IN_GEMINI_SMALL_MODEL",
+     "family": "gemini", "prompt": "direct", "price_in": null, "price_out": null}
+  ]
+}
